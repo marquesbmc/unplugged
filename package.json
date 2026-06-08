@@ -1,0 +1,131 @@
+{
+  "name": "unplugged",
+  "displayName": "Unplugged",
+  "description": "Agente de desenvolvimento local com LLM embutido (node-llama-cpp), contexto estruturado e memória persistente",
+  "version": "0.2.0",
+  "publisher": "unplugged",
+  "icon": "logo.png",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other", "Machine Learning"],
+  "keywords": ["ai", "offline", "agent", "local llm", "llama"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "unplugged.openChat",        "title": "Unplugged: Abrir Chat",                "icon": { "light": "./resources/icons/plug.svg", "dark": "./resources/icons/plug.svg" } },
+      { "command": "unplugged.indexWorkspace",   "title": "Unplugged: Indexar Workspace",         "icon": "$(database)" },
+      { "command": "unplugged.showBriefing",     "title": "Unplugged: Ver Code Briefing",         "icon": "$(book)" },
+      { "command": "unplugged.saveMemory",       "title": "Unplugged: Salvar Memória",            "icon": "$(bookmark)" },
+      { "command": "unplugged.loadModel",        "title": "Unplugged: Selecionar Modelo (.gguf)", "icon": "$(chip)" },
+      { "command": "unplugged.clearHistory",     "title": "Unplugged: Limpar Histórico",          "icon": "$(clear-all)" },
+      { "command": "unplugged.modelManager",     "title": "Unplugged: Gerenciador de Modelos",    "icon": "$(layers)" },
+      { "command": "unplugged.openInstructions", "title": "Unplugged: Instruções do Projeto",     "icon": "$(edit)" },
+      { "command": "unplugged.openDevProfile",   "title": "Unplugged: Perfil do Desenvolvedor",   "icon": "$(person)" },
+      { "command": "unplugged._testTool",        "title": "Unplugged: Testar Tool (dev)",          "icon": "$(beaker)" }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "unplugged", "title": "Unplugged", "icon": "./resources/icons/plug.svg" }
+      ]
+    },
+    "views": {
+      "unplugged": [
+        { "type": "webview", "id": "unplugged.chatView", "name": "Chat" }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        { "command": "unplugged.indexWorkspace",   "group": "navigation@1", "when": "view == unplugged.chatView" },
+        { "command": "unplugged.showBriefing",     "group": "navigation@2", "when": "view == unplugged.chatView" },
+        { "command": "unplugged.saveMemory",       "group": "navigation@3", "when": "view == unplugged.chatView" },
+        { "command": "unplugged.loadModel",        "group": "navigation@4", "when": "view == unplugged.chatView" },
+        { "command": "unplugged.clearHistory",     "group": "navigation@5", "when": "view == unplugged.chatView" },
+        { "command": "unplugged.modelManager",     "group": "navigation@6", "when": "view == unplugged.chatView" },
+        { "command": "unplugged.openInstructions", "group": "navigation@7", "when": "view == unplugged.chatView" }
+      ],
+      "editor/context": [
+        { "command": "unplugged.openChat", "group": "unplugged@1", "when": "editorHasText" }
+      ]
+    },
+    "configuration": {
+      "title": "Unplugged",
+      "properties": {
+        "unplugged.modelPath": {
+          "type": "string",
+          "default": "",
+          "description": "Caminho absoluto para o arquivo .gguf do modelo ativo. Use 'Unplugged: Selecionar Modelo' para configurar."
+        },
+        "unplugged.gpu": {
+          "type": "string",
+          "default": "auto",
+          "enum": ["auto", "cpu", "cuda", "vulkan", "metal"],
+          "enumDescriptions": [
+            "Detecta automaticamente (recomendado)",
+            "Força CPU (sem GPU)",
+            "CUDA (NVIDIA)",
+            "Vulkan (AMD/NVIDIA/Intel)",
+            "Metal (Apple Silicon)"
+          ],
+          "description": "Backend de GPU para inferência"
+        },
+        "unplugged.contextSize": {
+          "type": "number",
+          "default": 8192,
+          "minimum": 2048,
+          "maximum": 131072,
+          "description": "Janela de contexto em tokens"
+        },
+        "unplugged.maxTokens": {
+          "type": "number",
+          "default": 1024,
+          "minimum": 256,
+          "maximum": 32768,
+          "description": "Máximo de tokens gerados por resposta"
+        },
+        "unplugged.temperature": {
+          "type": "number",
+          "default": 0.2,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Temperatura (0 = determinístico)"
+        },
+        "unplugged.approvalMode": {
+          "type": "string",
+          "default": "always",
+          "enum": ["always", "destructive-only"],
+          "enumDescriptions": [
+            "Pede aprovação antes de qualquer escrita",
+            "Pede aprovação só para delete e comandos de terminal"
+          ],
+          "description": "Quando pedir aprovação antes de aplicar edições"
+        },
+        "unplugged.maxContextFiles": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Máximo de arquivos incluídos no contexto da LLM"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "rebuild": "electron-rebuild -v 39.8.8 -f -w node-llama-cpp"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "node-llama-cpp": "^3.0.0"
+  }
+}

@@ -1,0 +1,14 @@
+node_modules/
+out/
+*.vsix
+.env
+.unplugged/
+*.gguf
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.claude/
