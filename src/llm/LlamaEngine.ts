@@ -100,13 +100,15 @@ export class LlamaEngine {
       const session = new LlamaChatSession({
         contextSequence:     sequence,
         systemPrompt,
+        forceAddSystemPrompt: true,
         autoDisposeSequence: false, // gerenciamos manualmente via finally
       });
 
       const llamaHistory = this._convertHistory(history);
       if (llamaHistory.length > 0) {
+        const initialHistory = session.getChatHistory();
         session.setChatHistory(
-          llamaHistory as Parameters<typeof session.setChatHistory>[0],
+          [...initialHistory, ...llamaHistory] as Parameters<typeof session.setChatHistory>[0],
         );
       }
 
