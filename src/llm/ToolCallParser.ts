@@ -39,11 +39,80 @@ export class ToolCallParser {
       }
     }
 
-    return results;
+    return results.length ? results : this._fromLooseJson(text);
   }
 
   hasXmlToolCalls(text: string): boolean {
-    return /<tool_call>/.test(text);
+    return /<tool_call>/.test(text) || this._fromLooseJson(text).length > 0;
+  }
+
+  private _fromLooseJson(text: string): ParsedToolCall[] {
+    const results: ParsedToolCall[] = [];
+    let index = 0;
+
+    for (const candidate of this._jsonObjectCandidates(text)) {
+      try {
+        const parsed = JSON.parse(candidate) as { name?: unknown; arguments?: unknown };
+        if (typeof parsed.name !== 'string') { continue; }
+        if (parsed.arguments !== undefined && !this._isObject(parsed.arguments)) { continue; }
+
+        results.push({
+          id:       `json_${Date.now()}_${index++}`,
+          toolName: parsed.name,
+          args:     parsed.arguments ?? {},
+        });
+      } catch { /* ignora JSON parcial ou texto comum */ }
+    }
+
+    return results;
+  }
+
+  private _jsonObjectCandidates(text: string): string[] {
+    const candidates: string[] = [];
+    let start = -1;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === '\\') {
+          escaped = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (ch === '{') {
+        if (depth === 0) { start = i; }
+        depth++;
+        continue;
+      }
+
+      if (ch === '}' && depth > 0) {
+        depth--;
+        if (depth === 0 && start >= 0) {
+          candidates.push(text.slice(start, i + 1));
+          start = -1;
+        }
+      }
+    }
+
+    return candidates;
+  }
+
+  private _isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
   // Builds the tool prompt in Qwen2.5-Instruct native format:
