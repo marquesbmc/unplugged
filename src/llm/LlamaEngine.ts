@@ -47,6 +47,10 @@ export class LlamaEngine {
 
   get isLoaded(): boolean { return this._model !== null; }
 
+  get gpuBackend(): string | false {
+    return this._llama ? this._llama.gpu : false;
+  }
+
   async load(opts: LlamaEngineOptions): Promise<void> {
     if (
       this._opts?.modelPath   === opts.modelPath &&
@@ -68,10 +72,14 @@ export class LlamaEngine {
     const gpuValue: 'auto' | LlamaGpuType =
       opts.gpu === 'cpu' ? false : opts.gpu as LlamaGpuType;
 
-    this._llama   = await getLlama({ gpu: gpuValue, logLevel: LlamaLogLevel.error });
+    this._llama   = await getLlama({ gpu: gpuValue, logLevel: LlamaLogLevel.warn });
     this._model   = await this._llama.loadModel({ modelPath: opts.modelPath });
     this._context = await this._model.createContext({ contextSize: opts.contextSize });
     this._opts    = opts;
+
+    const info = this._llama.gpu;
+    console.log(`[Unplugged] Modelo carregado: ${opts.modelPath}`);
+    console.log(`[Unplugged] GPU backend: ${JSON.stringify(info)} | contextSize: ${opts.contextSize} | maxTokens: ${opts.maxTokens}`);
   }
 
   async *chat(
@@ -148,20 +156,18 @@ export class LlamaEngine {
     this._model   = null;
     this._llama   = null;
     this._opts    = null;
+    // gpuBackend is derived from _llama, so it auto-returns false after dispose
   }
 
   private _convertHistory(history: ChatMessage[]): unknown[] {
     const result: unknown[] = [];
     for (const msg of history) {
-      if (msg.role === 'system') { continue; }
       if (msg.role === 'user') {
         result.push({ type: 'user', text: msg.content });
       } else if (msg.role === 'assistant') {
         result.push({ type: 'model', response: [msg.content] });
-      } else if (msg.role === 'tool') {
-        result.push({ type: 'user',  text: `[RESULTADO DE FERRAMENTA]\n${msg.content}` });
-        result.push({ type: 'model', response: ['Entendido.'] });
       }
+      // 'system' and 'tool' are never in history after the AgentLoop refactor
     }
     return result;
   }

@@ -25,13 +25,14 @@ export class ModelManagerPanel {
     this._panel.webview.html = this._buildHtml();
     this._panel.onDidDispose(() => this._dispose(), null, this._subs);
     this._panel.webview.onDidReceiveMessage(async (msg: {
-      type: string; url?: string; destDir?: string; modelPath?: string;
+      type: string; url?: string; destDir?: string; modelPath?: string; gpu?: string;
     }) => {
       switch (msg.type) {
-        case 'browse':    await this._handleBrowse();                              break;
-        case 'download':  await this._handleDownload(msg.url ?? '', msg.destDir); break;
-        case 'cancel':    this._downloadAbort?.abort();                            break;
-        case 'activate':  await this._handleActivate(msg.modelPath ?? '');         break;
+        case 'browse':     await this._handleBrowse();                              break;
+        case 'download':   await this._handleDownload(msg.url ?? '', msg.destDir); break;
+        case 'cancel':     this._downloadAbort?.abort();                            break;
+        case 'activate':   await this._handleActivate(msg.modelPath ?? '');         break;
+        case 'setGpu':     await this._handleSetGpu(msg.gpu ?? 'auto');             break;
       }
     }, null, this._subs);
     this._sendState();
@@ -119,11 +120,19 @@ export class ModelManagerPanel {
     this._post({ type: 'activated', modelPath });
   }
 
+  private async _handleSetGpu(gpu: string): Promise<void> {
+    await vscode.workspace.getConfiguration('unplugged').update(
+      'gpu', gpu, vscode.ConfigurationTarget.Global,
+    );
+    this._sendState();
+  }
+
   private _sendState(): void {
-    const cfg        = vscode.workspace.getConfiguration('unplugged');
-    const modelPath  = cfg.get<string>('modelPath') ?? '';
-    const isLoaded   = this._engine.isLoaded;
-    this._post({ type: 'state', modelPath, isLoaded });
+    const cfg       = vscode.workspace.getConfiguration('unplugged');
+    const modelPath = cfg.get<string>('modelPath') ?? '';
+    const gpu       = cfg.get<string>('gpu') ?? 'auto';
+    const isLoaded  = this._engine.isLoaded;
+    this._post({ type: 'state', modelPath, isLoaded, gpu });
   }
 
   private _post(msg: unknown): void { this._panel.webview.postMessage(msg); }
@@ -139,31 +148,50 @@ export class ModelManagerPanel {
   private _buildHtml(): string {
     const recommended = [
       {
+        name:  'Qwen2.5-Coder-14B Q4_K_M',
+        size:  '~9 GB',
+        gpu:   'NVIDIA ≥ 10 GB',
+        desc:  'Melhor para tool calling — recomendado',
+        url:   'https://huggingface.co/bartowski/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf',
+        star:  true,
+      },
+      {
         name:  'Qwen2.5-Coder-7B Q4_K_M',
         size:  '~4.5 GB',
-        desc:  'Melhor equilíbrio qualidade/desempenho',
+        gpu:   'GPU ≥ 6 GB',
+        desc:  'Boa qualidade, mais leve',
         url:   'https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+        star:  false,
       },
       {
         name:  'Qwen2.5-Coder-3B Q4_K_M',
         size:  '~2 GB',
-        desc:  'Máquinas com menos memória',
+        gpu:   'CPU / GPU ≤ 4 GB',
+        desc:  'Máquinas com pouca memória',
         url:   'https://huggingface.co/bartowski/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf',
+        star:  false,
       },
       {
-        name:  'DeepSeek-Coder-6.7B Q4_K_M',
-        size:  '~4 GB',
-        desc:  'Alternativa especializada em código',
-        url:   'https://huggingface.co/TheBloke/deepseek-coder-6.7B-instruct-GGUF/resolve/main/deepseek-coder-6.7b-instruct.Q4_K_M.gguf',
+        name:  'Qwen2.5-Coder-32B Q4_K_M',
+        size:  '~20 GB',
+        gpu:   'GPU ≥ 24 GB',
+        desc:  'Máxima qualidade',
+        url:   'https://huggingface.co/bartowski/Qwen2.5-Coder-32B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf',
+        star:  false,
       },
     ];
 
     const recRows = recommended.map(m => `
-      <tr>
-        <td class="col-name"><strong>${esc(m.name)}</strong><br><span class="dim">${esc(m.desc)}</span></td>
+      <tr${m.star ? ' class="row-star"' : ''}>
+        <td class="col-name">
+          ${m.star ? '<span class="tag-rec">✦ recomendado</span>' : ''}
+          <strong>${esc(m.name)}</strong><br>
+          <span class="dim">${esc(m.desc)}</span>
+        </td>
         <td class="col-size">${esc(m.size)}</td>
+        <td class="col-gpu">${esc(m.gpu)}</td>
         <td class="col-act">
-          <button onclick="fillUrl('${esc(m.url)}')">Selecionar</button>
+          <button onclick="fillUrl('${esc(m.url)}')">Baixar</button>
         </td>
       </tr>`).join('');
 
@@ -218,9 +246,15 @@ thead th { text-align:left; font-size:11px; font-weight:600; text-transform:uppe
            border-bottom:1px solid var(--vscode-panel-border); }
 tbody tr { border-bottom:1px solid var(--vscode-panel-border,rgba(255,255,255,.06)); }
 tbody tr:last-child { border-bottom:none; }
+tbody tr.row-star { background: rgba(100,160,255,.06); }
 td { padding:8px; vertical-align:middle; }
-.col-size { width:80px; font-size:11px; color:var(--vscode-descriptionForeground); }
-.col-act  { width:90px; text-align:right; }
+.col-size { width:70px; font-size:11px; color:var(--vscode-descriptionForeground); }
+.col-gpu  { width:110px; font-size:11px; color:var(--vscode-descriptionForeground); }
+.col-act  { width:70px; text-align:right; }
+.tag-rec  { display:block; font-size:10px; font-weight:600; color:#61afef; margin-bottom:2px; }
+.gpu-btns { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+.gpu-btn  { font-size:12px; padding:5px 12px; }
+.gpu-btn.active { background:var(--vscode-button-background); color:var(--vscode-button-foreground); border-color:transparent; }
 .error-box { background:rgba(244,71,71,.1); border:1px solid var(--vscode-errorForeground,#f44);
              border-radius:4px; padding:10px 14px; font-size:12px; color:var(--vscode-errorForeground,#f44); }
 </style>
@@ -233,6 +267,21 @@ td { padding:8px; vertical-align:middle; }
   <h2>Modelo Ativo</h2>
   <div class="card">
     <div id="active-info" class="dim">Nenhum modelo configurado.</div>
+  </div>
+</div>
+
+<div>
+  <h2>Configuração de GPU</h2>
+  <div class="card">
+    <div class="dim">Backend de inferência. Selecione conforme sua placa de vídeo.</div>
+    <div class="gpu-btns">
+      <button class="gpu-btn" id="gpu-auto"   onclick="setGpu('auto')">⚡ Auto</button>
+      <button class="gpu-btn" id="gpu-cuda"   onclick="setGpu('cuda')">🟢 NVIDIA (CUDA)</button>
+      <button class="gpu-btn" id="gpu-vulkan" onclick="setGpu('vulkan')">🔵 AMD / Intel (Vulkan)</button>
+      <button class="gpu-btn" id="gpu-metal"  onclick="setGpu('metal')">⬛ Apple (Metal)</button>
+      <button class="gpu-btn" id="gpu-cpu"    onclick="setGpu('cpu')">🖥 CPU</button>
+    </div>
+    <div class="dim" style="margin-top:8px" id="gpu-hint"></div>
   </div>
 </div>
 
@@ -275,7 +324,7 @@ td { padding:8px; vertical-align:middle; }
   <h2>Modelos Recomendados</h2>
   <table>
     <thead><tr>
-      <th>Modelo</th><th class="col-size">Tamanho</th><th class="col-act">Ação</th>
+      <th>Modelo</th><th class="col-size">Tamanho</th><th class="col-gpu">GPU</th><th class="col-act">Ação</th>
     </tr></thead>
     <tbody>${recRows}</tbody>
   </table>
@@ -286,6 +335,27 @@ td { padding:8px; vertical-align:middle; }
 
   function browse()        { vsc.postMessage({ type: 'browse' }); }
   function cancelDownload(){ vsc.postMessage({ type: 'cancel' }); }
+
+  const GPU_HINTS = {
+    auto:   'Detecta automaticamente a melhor opção disponível.',
+    cuda:   'NVIDIA — requer drivers CUDA instalados. Recomendado para placas NVIDIA.',
+    vulkan: 'AMD ou Intel — usa Vulkan. Compatível com a maioria das placas modernas.',
+    metal:  'Apple Silicon (M1/M2/M3) — máximo desempenho no Mac.',
+    cpu:    'Sem GPU — mais lento, mas funciona em qualquer máquina.',
+  };
+
+  function setGpu(gpu) {
+    vsc.postMessage({ type: 'setGpu', gpu });
+    updateGpuButtons(gpu);
+  }
+
+  function updateGpuButtons(gpu) {
+    ['auto','cuda','vulkan','metal','cpu'].forEach(g => {
+      const btn = document.getElementById('gpu-' + g);
+      if (btn) { btn.classList.toggle('active', g === gpu); }
+    });
+    document.getElementById('gpu-hint').textContent = GPU_HINTS[gpu] || '';
+  }
 
   function fillUrl(url) {
     document.getElementById('url-input').value = url;
@@ -318,6 +388,7 @@ td { padding:8px; vertical-align:middle; }
       document.getElementById('active-info').innerHTML = name
         ? '<span class="active-model">' + esc(name) + '</span> ' + badge
         : '<span class="dim">Nenhum modelo configurado.</span>';
+      updateGpuButtons(m.gpu || 'auto');
       return;
     }
     if (m.type === 'activated') {

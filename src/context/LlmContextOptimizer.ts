@@ -5,6 +5,39 @@ import { ConfigScanner }         from '../capture/ConfigScanner';
 import { TutorialSelector }      from './TutorialSelector';
 import { MemoryPalace }          from '../memory/MemoryPalace';
 
+const IGNORED_DIRS = new Set([
+  'node_modules', '.git', 'out', 'dist', 'build', '.next', '.nuxt',
+  '__pycache__', '.venv', 'venv', '.cache', '.unplugged',
+]);
+
+function _fileTree(dir: string, wsRoot: string, maxFiles = 120, maxDepth = 4): string {
+  const lines: string[] = [];
+  let count = 0;
+
+  function walk(current: string, depth: number): void {
+    if (depth > maxDepth || count >= maxFiles) { return; }
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(current, { withFileTypes: true }); }
+    catch { return; }
+
+    const dirs  = entries.filter(e => e.isDirectory() && !IGNORED_DIRS.has(e.name));
+    const files = entries.filter(e => e.isFile());
+
+    for (const f of files) {
+      if (count >= maxFiles) { return; }
+      lines.push(path.relative(wsRoot, path.join(current, f.name)));
+      count++;
+    }
+    for (const d of dirs) {
+      walk(path.join(current, d.name), depth + 1);
+    }
+  }
+
+  walk(dir, 0);
+  if (count >= maxFiles) { lines.push(`... (limitado a ${maxFiles} arquivos)`); }
+  return lines.join('\n');
+}
+
 export interface ContextSection {
   label:    string;
   content:  string;
@@ -28,7 +61,6 @@ export interface BuildOptions {
   sections?: ContextSection[];
 }
 
-const TOKEN_BUDGET = 6000;
 const CHARS_PER_TOKEN = 3.5;
 
 function estimateTokens(text: string): number {
@@ -43,6 +75,7 @@ export class LlmContextOptimizer {
   ) {}
 
   build(opts: BuildOptions): CodeBriefing {
+    const TOKEN_BUDGET = vscode.workspace.getConfiguration('unplugged').get<number>('contextBudget') ?? 6000;
     const wsRoot   = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const task     = opts.task ?? '';
     const sections: ContextSection[] = [];
@@ -95,6 +128,20 @@ export class LlmContextOptimizer {
         lines.push(`**Package manager:** ${info.packageManager}`);
         if (info.configFiles.length) { lines.push(`**Config files:** ${info.configFiles.join(', ')}`); }
         sections.push({ label: 'Config', content: `### Configuração do projeto\n\n${lines.join('\n')}`, priority: 50 });
+      } catch { /* ok */ }
+    }
+
+    // 4b. Árvore de arquivos do workspace (priority 45)
+    if (wsRoot) {
+      try {
+        const tree = _fileTree(wsRoot, wsRoot);
+        if (tree) {
+          sections.push({
+            label:    'Arquivos',
+            content:  `### Arquivos do projeto\n\nUse \`read_file\` para ler qualquer arquivo abaixo:\n\`\`\`\n${tree}\n\`\`\``,
+            priority: 45,
+          });
+        }
       } catch { /* ok */ }
     }
 

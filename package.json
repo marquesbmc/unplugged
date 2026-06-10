@@ -7,6 +7,7 @@
   "icon": "logo.png",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other", "Machine Learning"],
+  "repository": { "type": "git", "url": "https://github.com/marquesbmc/unplugged.git" },
   "keywords": ["ai", "offline", "agent", "local llm", "llama"],
   "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
@@ -21,6 +22,7 @@
       { "command": "unplugged.modelManager",     "title": "Unplugged: Gerenciador de Modelos",    "icon": "$(layers)" },
       { "command": "unplugged.openInstructions", "title": "Unplugged: Instruções do Projeto",     "icon": "$(edit)" },
       { "command": "unplugged.openDevProfile",   "title": "Unplugged: Perfil do Desenvolvedor",   "icon": "$(person)" },
+      { "command": "unplugged.openSettings",    "title": "Unplugged: Configurações",              "icon": "$(settings-gear)" },
       { "command": "unplugged._testTool",        "title": "Unplugged: Testar Tool (dev)",          "icon": "$(beaker)" }
     ],
     "viewsContainers": {
@@ -41,7 +43,8 @@
         { "command": "unplugged.loadModel",        "group": "navigation@4", "when": "view == unplugged.chatView" },
         { "command": "unplugged.clearHistory",     "group": "navigation@5", "when": "view == unplugged.chatView" },
         { "command": "unplugged.modelManager",     "group": "navigation@6", "when": "view == unplugged.chatView" },
-        { "command": "unplugged.openInstructions", "group": "navigation@7", "when": "view == unplugged.chatView" }
+        { "command": "unplugged.openInstructions", "group": "navigation@7", "when": "view == unplugged.chatView" },
+        { "command": "unplugged.openSettings",    "group": "navigation@8", "when": "view == unplugged.chatView" }
       ],
       "editor/context": [
         { "command": "unplugged.openChat", "group": "unplugged@1", "when": "editorHasText" }
@@ -105,6 +108,13 @@
           "minimum": 1,
           "maximum": 50,
           "description": "Máximo de arquivos incluídos no contexto da LLM"
+        },
+        "unplugged.contextBudget": {
+          "type": "number",
+          "default": 6000,
+          "minimum": 1000,
+          "maximum": 32000,
+          "description": "Budget de tokens para o contexto de código enviado ao modelo (arquivo ativo, tutoriais, memória, config). Aumente para modelos com janela de contexto maior."
         }
       }
     }
@@ -114,7 +124,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",
-    "rebuild": "electron-rebuild -v 39.8.8 -f -w node-llama-cpp"
+    "rebuild": "electron-rebuild -v 42.2.0 -f -w node-llama-cpp"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",

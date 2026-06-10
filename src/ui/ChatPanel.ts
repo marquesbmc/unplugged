@@ -9,14 +9,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   static readonly VIEW_ID = 'unplugged.chatView';
 
   private _view?:           vscode.WebviewView;
-  private _onUserMsg?:      (text: string) => void;
-  private _onReadProject?:  () => void;
-  private _lastStatus:      StatusMsg = { text: 'Inicializando...', state: 'idle' };
+  private _onUserMsg?:  (text: string) => void;
+  private _lastStatus: StatusMsg = { text: 'Inicializando...', state: 'idle' };
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
 
-  onUserMessage(cb: (text: string) => void): void    { this._onUserMsg = cb; }
-  onReadProject(cb: () => void): void               { this._onReadProject = cb; }
+  onUserMessage(cb: (text: string) => void): void { this._onUserMsg = cb; }
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this._view = view;
@@ -33,8 +31,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       }
       if (msg.type === 'send' && msg.text) { this._onUserMsg?.(msg.text); }
-      if (msg.type === 'readProject')      { this._onReadProject?.(); }
-      if (msg.type === 'abort')             { vscode.commands.executeCommand('unplugged.abort'); }
+      if (msg.type === 'abort')            { vscode.commands.executeCommand('unplugged.abort'); }
     });
   }
 
@@ -51,8 +48,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this._post({ type: 'status', text, state });
   }
 
-  clear(): void              { this._post({ type: 'clear' }); }
-  readProjectDone(): void    { this._post({ type: 'readProjectDone' }); }
+  clear(): void { this._post({ type: 'clear' }); }
 
   dispose(): void { /* noop */ }
 
@@ -150,14 +146,13 @@ body {
   resize: none; min-height: 36px; max-height: 120px; outline: none; line-height: 1.4;
 }
 #input:focus { border-color: var(--vscode-focusBorder); }
-#send-btn, #read-btn {
+#send-btn {
   background: var(--vscode-button-background); color: var(--vscode-button-foreground);
   border: none; border-radius: 4px; padding: 6px 10px;
   cursor: pointer; font-size: 13px; flex-shrink: 0; height: 36px;
 }
-#send-btn:hover, #read-btn:hover { background: var(--vscode-button-hoverBackground); }
-#send-btn:disabled, #read-btn:disabled { opacity: .4; cursor: not-allowed; }
-#read-btn { font-size: 15px; padding: 4px 8px; }
+#send-btn:hover    { background: var(--vscode-button-hoverBackground); }
+#send-btn:disabled { opacity: .4; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -167,7 +162,6 @@ body {
 </div>
 <div id="messages"></div>
 <div id="input-area">
-  <button id="read-btn" onclick="readProject()" title="Ler estrutura do projeto">📁</button>
   <textarea id="input" rows="1" placeholder="Digite uma mensagem... (Enter para enviar, Shift+Enter para nova linha)"></textarea>
   <button id="send-btn" onclick="send()">↑</button>
 </div>
@@ -187,17 +181,10 @@ body {
   function send() {
     var text = input.value.trim();
     if (!text || busy) { return; }
+    addMsg('user', text);
     vsc.postMessage({ type: 'send', text: text });
     input.value = '';
     input.style.height = '';
-  }
-
-  function readProject() {
-    if (busy) { return; }
-    var btn = document.getElementById('read-btn');
-    btn.disabled = true;
-    btn.textContent = '⏳';
-    vsc.postMessage({ type: 'readProject' });
   }
 
   input.addEventListener('keydown', function(e) {
@@ -242,12 +229,6 @@ body {
     if (m.type === 'clear') {
       msgs.innerHTML = '';
       streamDiv = null;
-      return;
-    }
-    if (m.type === 'readProjectDone') {
-      var btn = document.getElementById('read-btn');
-      btn.disabled = false;
-      btn.textContent = '📁';
       return;
     }
   });

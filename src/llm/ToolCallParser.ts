@@ -46,47 +46,48 @@ export class ToolCallParser {
     return /<tool_call>/.test(text);
   }
 
+  // Builds the tool prompt in Qwen2.5-Instruct native format:
+  // tools as JSON objects inside <tools> tags, calls as JSON inside <tool_call> tags.
   static buildXmlToolsPrompt(tools: ToolSchema[]): string {
-    const lines = [
-      '## FERRAMENTAS — LEIA COM ATENÇÃO',
+    const toolsJson = tools
+      .map(t => JSON.stringify(t))
+      .join('\n');
+
+    return [
+      '# Ferramentas',
       '',
-      'Você está rodando DENTRO do VS Code com acesso total ao workspace do desenvolvedor.',
-      'Você TEM ferramentas reais. Use-as SEMPRE que a tarefa envolver código, arquivos ou o projeto.',
-      'NUNCA diga "não consigo acessar arquivos" — você PODE e DEVE usar as ferramentas abaixo.',
+      'Você está executando DENTRO do VS Code com acesso real ao workspace do desenvolvedor.',
+      'Você DEVE usar as ferramentas abaixo sempre que a tarefa envolver arquivos, código ou o projeto.',
+      'Nunca diga "não consigo acessar arquivos" — você TEM ferramentas reais e DEVE usá-las.',
       '',
-      'Para chamar uma ferramenta, emita exatamente este bloco XML na sua resposta:',
+      'As ferramentas disponíveis estão listadas abaixo:',
+      '<tools>',
+      toolsJson,
+      '</tools>',
       '',
+      'Para chamar uma ferramenta, emita exatamente este bloco na sua resposta:',
       '<tool_call>',
       '{"name": "nome_da_ferramenta", "arguments": {"parametro": "valor"}}',
       '</tool_call>',
       '',
-      'Você receberá o resultado e deve continuar a resposta a partir dele.',
-      'Chame quantas ferramentas forem necessárias, uma de cada vez.',
+      'Você receberá o resultado e deve continuar. Chame quantas ferramentas forem necessárias.',
       '',
-      '### Exemplo',
+      '## Exemplos de uso obrigatório',
       '',
-      'Usuário: "o que tem no arquivo main.ts?"',
-      'Assistente:',
+      'Usuário pede "liste os arquivos do projeto":',
+      '<tool_call>',
+      '{"name": "list_directory_tree", "arguments": {"path": "."}}',
+      '</tool_call>',
+      '',
+      'Usuário pede "leia o arquivo extension.ts":',
+      '<tool_call>',
+      '{"name": "read_file", "arguments": {"path": "src/extension.ts"}}',
+      '</tool_call>',
+      '',
+      'Usuário pede "o que tem no arquivo aberto":',
       '<tool_call>',
       '{"name": "get_active_file", "arguments": {}}',
       '</tool_call>',
-      '',
-      '[resultado chega aqui — você analisa e responde]',
-      '',
-      '### Ferramentas disponíveis',
-    ];
-
-    for (const t of tools) {
-      const props  = t.function.parameters.properties;
-      const params = Object.entries(props)
-        .map(([k, v]) => `  - ${k}: ${v.description}`)
-        .join('\n');
-      lines.push('');
-      lines.push(`**${t.function.name}** — ${t.function.description}`);
-      if (params) { lines.push(params); }
-      else        { lines.push('  (sem parâmetros)'); }
-    }
-
-    return lines.join('\n');
+    ].join('\n');
   }
 }

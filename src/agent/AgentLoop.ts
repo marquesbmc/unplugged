@@ -40,7 +40,8 @@ export class AgentLoop {
     }
     this._running = true;
     this._abort   = new AbortController();
-    this.history.add({ role: 'user', content: userMessage });
+    // Note: user message is added to history INSIDE _loop, after getting the response,
+    // so it is never duplicated as both history entry AND session.prompt() argument.
 
     try {
       await this._loop(userMessage, sections);
@@ -65,6 +66,9 @@ export class AgentLoop {
 
     let rounds         = 0;
     let totalToolCalls = 0;
+    // currentMsg starts as the user's question; becomes tool results for subsequent rounds.
+    // History always ends on an 'assistant' turn, so session.prompt(currentMsg) always
+    // adds a single clean 'user' turn — no consecutive user turns that break ChatML.
     let currentMsg     = userMessage;
 
     while (rounds < MAX_TOOL_ROUNDS) {
@@ -78,7 +82,7 @@ export class AgentLoop {
       try {
         for await (const token of this.engine.chat(
           systemPrompt,
-          this.history.getAll(),
+          this.history.getAll(),   // always ends on 'assistant' or is empty
           currentMsg,
           this._abort?.signal,
         )) {
@@ -96,6 +100,9 @@ export class AgentLoop {
       this.chat.endStreaming();
       const llmMs = Date.now() - tLlm;
 
+      // Add this round's exchange AFTER the response, not before.
+      // This keeps history ending on 'assistant' for the next call.
+      this.history.add({ role: 'user',      content: currentMsg });
       this.history.add({ role: 'assistant', content: responseText });
 
       const toolCalls = this._parser.fromXml(responseText);
@@ -115,6 +122,9 @@ export class AgentLoop {
 
       this.chat.setStatus(`executando ferramentas... (rodada ${rounds})`, 'busy');
 
+      // Collect all tool results — they become the 'user' input for the next round,
+      // so the model receives: [prev history] → user(tool results) → assistant(continuation).
+      const toolResultParts: string[] = [];
       for (const call of toolCalls) {
         totalToolCalls++;
         this.chat.addMessage('tool', `→ ${this._formatToolCall(call)}`);
@@ -122,10 +132,10 @@ export class AgentLoop {
         const result = await this.executor.execute(call);
         const toolMs = Date.now() - tTool;
         this.chat.addMessage('tool', `← [${ms(toolMs)}] ${this._formatResult(result.content)}`);
-        this.history.add({ role: 'tool', content: `[TOOL: ${call.toolName}]\n${result.content}` });
+        toolResultParts.push(`[RESULTADO: ${call.toolName}]\n${result.content}`);
       }
 
-      currentMsg = '';
+      currentMsg = toolResultParts.join('\n\n---\n\n');
     }
 
     this.chat.addMessage('system', `Limite de ${MAX_TOOL_ROUNDS} rodadas de ferramentas atingido.`);
@@ -149,6 +159,9 @@ export class AgentLoop {
     catch { parts.push('Você é Unplugged, um agente de desenvolvimento local.'); }
 
     if (wsRoot) {
+      // Workspace root path — lets the model construct absolute paths for terminal commands
+      parts.push('', '---', '', `## Workspace\n\nCaminho raiz: \`${wsRoot}\`\n\nUse caminhos relativos à raiz com \`read_file\` (ex: \`src/extension.ts\`).\nPara navegar com terminal, use caminhos absolutos a partir de \`${wsRoot}\`.`);
+
       const instrPath = path.join(wsRoot, '.unplugged', 'instructions.md');
       try {
         const instr = fs.readFileSync(instrPath, 'utf8').trim();
