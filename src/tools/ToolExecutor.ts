@@ -115,6 +115,7 @@ export class ToolExecutor {
     if (fs.existsSync(abs)) { return { content: `Erro: arquivo já existe. Use apply_edit para modificar.` }; }
     const approved = await this.opts.onPendingEdit({ path: abs, original: '', modified: content });
     if (!approved) { return { content: 'Criação recusada pelo usuário.' }; }
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
     const edit = new vscode.WorkspaceEdit();
     const uri  = vscode.Uri.file(abs);
     edit.createFile(uri, { overwrite: false });

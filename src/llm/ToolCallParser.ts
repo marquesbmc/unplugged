@@ -1,4 +1,6 @@
-import { ToolSchema, ParsedToolCall } from '../tools/ToolRegistry';
+import { ToolSchema, ParsedToolCall, TOOL_SCHEMAS } from '../tools/ToolRegistry';
+
+const TOOL_NAMES = new Set(TOOL_SCHEMAS.map(t => t.function.name));
 
 export class ToolCallParser {
   fromXml(text: string): ParsedToolCall[] {
@@ -13,7 +15,7 @@ export class ToolCallParser {
       if (body.startsWith('{')) {
         try {
           const parsed = JSON.parse(body) as { name?: string; arguments?: Record<string, unknown> };
-          if (parsed.name) {
+          if (parsed.name && TOOL_NAMES.has(parsed.name)) {
             results.push({
               id:       `xml_${Date.now()}_${index++}`,
               toolName: parsed.name,
@@ -27,13 +29,15 @@ export class ToolCallParser {
       const nameMatch   = /<name>(.*?)<\/name>/s.exec(body);
       const paramsMatch = /<parameters>([\s\S]*?)<\/parameters>/s.exec(body);
       if (nameMatch) {
+        const toolName = nameMatch[1].trim();
+        if (!TOOL_NAMES.has(toolName)) { continue; }
         let args: Record<string, unknown> = {};
         if (paramsMatch) {
           try { args = JSON.parse(paramsMatch[1].trim()); } catch { /* ok */ }
         }
         results.push({
           id:       `xml_${Date.now()}_${index++}`,
-          toolName: nameMatch[1].trim(),
+          toolName,
           args,
         });
       }
@@ -54,12 +58,13 @@ export class ToolCallParser {
       try {
         const parsed = JSON.parse(candidate) as { name?: unknown; arguments?: unknown };
         if (typeof parsed.name !== 'string') { continue; }
-        if (parsed.arguments !== undefined && !this._isObject(parsed.arguments)) { continue; }
+        if (!TOOL_NAMES.has(parsed.name)) { continue; }
+        if (!this._isObject(parsed.arguments)) { continue; }
 
         results.push({
           id:       `json_${Date.now()}_${index++}`,
           toolName: parsed.name,
-          args:     parsed.arguments ?? {},
+          args:     parsed.arguments,
         });
       } catch { /* ignora JSON parcial ou texto comum */ }
     }
